@@ -31,7 +31,7 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
             public int Port { get; set; }
             public Dictionary<IPEndPoint, RelayPair> Mappings { get; } = new Dictionary<IPEndPoint, RelayPair>();
             public Mutex Lock { get; } = new Mutex();
-            public HashSet<IPEndPoint>[] TimeoutSet = { new HashSet<IPEndPoint>(), new HashSet<IPEndPoint>() };
+            public HashSet<IPEndPoint> TimeoutSet = new HashSet<IPEndPoint>();
         }
 
         private readonly ILogger _logger;
@@ -132,10 +132,7 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
                     return;
                 }
 
-                if (socket.TimeoutSet[1].Remove(sender))
-                {
-                    socket.TimeoutSet[0].Remove(sender);
-                }
+                socket.TimeoutSet.Remove(sender);
 
                 RelayPair pair = socket.Mappings[sender];
                 IPEndPoint target = pair.Source;
@@ -219,7 +216,7 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
             socket.Lock.WaitOne();
             try
             {
-                foreach (IPEndPoint endpoint in socket.TimeoutSet[0])
+                foreach (IPEndPoint endpoint in socket.TimeoutSet)
                 {
                     if (!socket.Mappings.ContainsKey(endpoint))
                     {
@@ -233,9 +230,7 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
                     socket.Mappings.Remove(peer.Source);
                     socket.Mappings.Remove(peer.Target);
                 }
-
-                socket.TimeoutSet[0] = socket.TimeoutSet[1];
-                socket.TimeoutSet[1] = socket.Mappings.Keys.ToHashSet();
+                socket.TimeoutSet = socket.Mappings.Keys.ToHashSet();
             }
             finally
             {
