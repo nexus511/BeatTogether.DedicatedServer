@@ -36,8 +36,6 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
 
         private readonly ILogger _logger;
         private readonly IPAddress _address;
-        private readonly int _startPort;
-        private readonly int _endPort;
         private readonly int _selectTimeout;
         private readonly long _peerTimeout;
 
@@ -53,27 +51,38 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
         public RelaySocket(IPAddress address, int startPort, int workers)
         {
             _logger = Log.ForContext<RelaySocket>();
-
             _address = address;
-            _startPort = startPort;
-            _endPort = startPort + workers - 1;
             _active = true;
             _selectTimeout = 1000;
             _peerTimeout = 60;
+            int endPort = startPort + workers - 1;
 
             _thread = new Thread(new ThreadStart(SocketThread));
             _thread.IsBackground = true;
 
-            _logger.Information("Opening sockets {_startPort} to {_endPort} " +
+            _logger.Information($"Opening sockets {startPort} to {endPort} " +
                 $" with handler {_thread}"
             );
 
-            for (int port = startPort; port <= _endPort; ++startPort)
+            for (int port = startPort; port <= endPort; ++startPort)
             {
                 _sockets.AddLast(new UdpRelaySocket(address, port));
             }
 
             _thread.Start();
+        }
+        public bool Stop()
+        {
+            _logger.Information($"Stopping {_thread}");
+            this._active = false;
+            if (this._thread.Join(_selectTimeout * 3))
+            {
+                _logger.Information($"{_thread} has stopped.");
+                return true;
+            }
+
+            _logger.Error($"Failed to stop {_thread}.");
+            return false;
         }
 
         public IPEndPoint AddRelayFor(IPEndPoint source, IPEndPoint target)
