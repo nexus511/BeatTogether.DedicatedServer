@@ -73,9 +73,14 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
         }
         public bool Stop()
         {
+            if (!_active)
+            {
+                return true;
+            }
+
             _logger.Information($"Stopping {_thread}");
-            this._active = false;
-            if (this._thread.Join(_selectTimeout * 3))
+            _active = false;
+            if (_thread.Join(_selectTimeout * 3))
             {
                 _logger.Information($"{_thread} has stopped.");
                 return true;
@@ -83,6 +88,11 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
 
             _logger.Error($"Failed to stop {_thread}.");
             return false;
+        }
+
+        ~RelaySocket()
+        {
+            Stop();
         }
 
         public IPEndPoint AddRelayFor(IPEndPoint source, IPEndPoint target)
