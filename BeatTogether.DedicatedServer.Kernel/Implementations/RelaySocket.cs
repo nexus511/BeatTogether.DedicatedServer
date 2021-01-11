@@ -18,7 +18,6 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
         {
             public IPEndPoint Source { get; set; }
             public IPEndPoint Target { get; set; }
-            public long LastActive { get; set; }
         }
         private class UdpRelaySocket : Socket
         {
@@ -27,15 +26,12 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
             {
                 this.Bind(new IPEndPoint(address, port));
                 Port = port;
-                Mappings = new Dictionary<IPEndPoint, RelayPair>();
-                Pairs = new LinkedList<RelayPair>();
-                Lock = new Mutex();
             }
 
             public int Port { get; set; }
-            public Dictionary<IPEndPoint, RelayPair> Mappings { get; }
-            public LinkedList<RelayPair> Pairs { get; }
-            public Mutex Lock { get; }
+            public Dictionary<IPEndPoint, RelayPair> Mappings { get; } = new Dictionary<IPEndPoint, RelayPair>();
+            public Mutex Lock { get; } = new Mutex();
+            public HashSet<IPEndPoint>[] TimeoutSet = { new HashSet<IPEndPoint>(), new HashSet<IPEndPoint>() };
         }
 
         private readonly ILogger _logger;
@@ -91,6 +87,7 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
             return new IPEndPoint(_address, port);
         }
 
+        #region Private Methods
         private void SocketThread()
         {
             _logger.Verbose("Start listening on {_startPort} to {_endPort} " +
@@ -135,8 +132,12 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
                     return;
                 }
 
+                if (socket.TimeoutSet[1].Remove(sender))
+                {
+                    socket.TimeoutSet[0].Remove(sender);
+                }
+
                 RelayPair pair = socket.Mappings[sender];
-                pair.LastActive = CurrentTimestamp();
                 IPEndPoint target = pair.Source;
                 if (target.Equals(sender))
                 {
@@ -188,13 +189,11 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
             { 
                 RelayPair pair = new RelayPair {
                     Source = source,
-                    Target = target,
-                    LastActive = CurrentTimestamp()
+                    Target = target
                 };
 
                 socket.Mappings[source] = pair;
                 socket.Mappings[target] = pair;
-                socket.Pairs.AddLast(pair);
 
                 return socket.Port;
             }
@@ -217,27 +216,26 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
         }
         private void CheckTimeouts(long timestamp, UdpRelaySocket socket)
         {
-            // can be optimized by using a priority queue instead of iterating all
             socket.Lock.WaitOne();
             try
             {
-                var node = socket.Pairs.First;
-                while (node != null)
+                foreach (IPEndPoint endpoint in socket.TimeoutSet[0])
                 {
-                    var next = node.Next;
-                    if (node.Value.LastActive + _peerTimeout < timestamp)
+                    if (!socket.Mappings.ContainsKey(endpoint))
                     {
-                        _logger.Information("Removing peers {0} <-> {1} from port {2} ",
-                            node.Value.Source,
-                            node.Value.Target,
-                            socket.Port
-                        );
-                        socket.Mappings.Remove(node.Value.Source);
-                        socket.Mappings.Remove(node.Value.Target);
-                        socket.Pairs.Remove(node);
+                        continue;
                     }
-                    node = next;
+
+                    var peer = socket.Mappings[endpoint];
+                    _logger.Information("Removing peers "+
+                        $"{peer.Source} <-> {peer.Target} "+
+                        $"from port {socket.Port} ");
+                    socket.Mappings.Remove(peer.Source);
+                    socket.Mappings.Remove(peer.Target);
                 }
+
+                socket.TimeoutSet[0] = socket.TimeoutSet[1];
+                socket.TimeoutSet[1] = socket.Mappings.Keys.ToHashSet();
             }
             finally
             {
@@ -245,4 +243,5 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
             }
         }
     }
+    #endregion
 }
