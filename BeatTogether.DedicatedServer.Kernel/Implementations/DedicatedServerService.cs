@@ -26,11 +26,11 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
 
         public Task<GetAvailableRelayServerResponse> GetAvailableRelayServer(GetAvailableRelayServerRequest request)
         {
-            var relayServer = _relayServerFactory.GetRelayServer(
+            var assignedAddress = _relayServerFactory.GetRelayServer(
                 IPEndPoint.Parse(request.SourceEndPoint),
                 IPEndPoint.Parse(request.TargetEndPoint)
             );
-            if (relayServer == null)
+            if (assignedAddress == null)
             {
                 _logger.Warning(
                     "No available slots for relay server " +
@@ -42,22 +42,9 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
                     Error = GetAvailableRelayServerResponse.ErrorCode.NoAvailableRelayServers
                 });
             }
-            if (!relayServer.Start())
-            {
-                _logger.Warning(
-                    "Failed to start UDP relay server for "+
-                    $"(SourceEndPoint='{request.SourceEndPoint}', " +
-                    $"TargetEndPoint='{request.TargetEndPoint}')."
-                );
-                return Task.FromResult(new GetAvailableRelayServerResponse()
-                {
-                    // TODO: should rarely happen, but a more specific error might be good
-                    Error = GetAvailableRelayServerResponse.ErrorCode.NoAvailableRelayServers
-                });
-            }
             return Task.FromResult(new GetAvailableRelayServerResponse()
             {
-                RemoteEndPoint = $"{_configuration.HostName}:{relayServer.Endpoint.Port}"
+                RemoteEndPoint = $"{_configuration.HostName}:{assignedAddress.Port}"
             });
         }
     }

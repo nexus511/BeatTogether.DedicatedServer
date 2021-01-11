@@ -14,25 +14,50 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
 {
     class RelaySocket : IRelaySocket
     {
+        public class RelayPair
+        {
+            public IPEndPoint Source { get; set; }
+            public IPEndPoint Target { get; set; }
+            public long LastActive { get; set; }
+        }
+        private class UdpRelaySocket : Socket
+        {
+            public UdpRelaySocket(IPAddress address, int port)
+                : base(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp)
+            {
+                this.Bind(new IPEndPoint(address, port));
+                Port = port;
+                Mappings = new Dictionary<IPEndPoint, RelayPair>();
+                Pairs = new LinkedList<RelayPair>();
+                Lock = new Mutex();
+            }
+
+            public int Port { get; set; }
+            public Dictionary<IPEndPoint, RelayPair> Mappings { get; }
+            public LinkedList<RelayPair> Pairs { get; }
+            public Mutex Lock { get; }
+        }
+
         private readonly ILogger _logger;
         private readonly IPAddress _address;
         private readonly int _startPort;
         private readonly int _endPort;
         private readonly int _selectTimeout;
         private readonly long _peerTimeout;
-        private readonly Thread _thread;
-        private readonly LinkedList<Socket> _sockets;
 
-        private readonly Dictionary<IPEndPoint, RelayPair> _mappings;
-        private readonly LinkedList<RelayPair> _relayPairs;
+        private readonly LinkedList<UdpRelaySocket> _sockets = new LinkedList<UdpRelaySocket>();
+        private int _nextSocketIndex = 0;
+
+        private readonly Thread _thread;
 
         private Stopwatch _stopwatch;
-
+        
         private bool _active;
 
         public RelaySocket(IPAddress address, int startPort, int workers)
         {
-            _logger = Log.ForContext<RelayServer>();
+            _logger = Log.ForContext<RelaySocket>();
+
             _address = address;
             _startPort = startPort;
             _endPort = startPort + workers - 1;
@@ -49,12 +74,21 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
 
             for (int port = startPort; port <= _endPort; ++startPort)
             {
-                Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-                _sockets.AddLast(socket);
-                socket.Bind(new IPEndPoint(address, port));
+                _sockets.AddLast(new UdpRelaySocket(address, port));
             }
 
             _thread.Start();
+        }
+
+        public IPEndPoint AddRelayFor(IPEndPoint source, IPEndPoint target)
+        {
+            UdpRelaySocket socket = FindPossiblePort(source, target);
+            if (socket == null)
+            {
+                return null;
+            }
+            int port = AddRelay(source, target, socket);
+            return new IPEndPoint(_address, port);
         }
 
         private void SocketThread()
@@ -68,12 +102,12 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
 
             while (_active)
             {
-                List<Socket> readSockets = _sockets.ToList();
+                List<Socket> readSockets = _sockets.ToList<Socket>();
                 Socket.Select(readSockets, null, null, _selectTimeout);
 
                 foreach (Socket socket in readSockets)
                 {
-                    RelayFromSocket(socket);
+                    RelayFromSocket((UdpRelaySocket) socket);
                 }
 
                 long timestamp = CurrentTimestamp();
@@ -84,74 +118,130 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
                 }
             }
         }
-
-        private void RelayFromSocket(Socket socket)
+        private void RelayFromSocket(UdpRelaySocket socket)
         {
             byte[] buffer = new byte[socket.Available];
             IPEndPoint sender = new IPEndPoint(IPAddress.Any, 0);
             EndPoint endpoint = (EndPoint)sender;
 
             int len = socket.ReceiveFrom(buffer, 0, socket.Available, SocketFlags.None, ref endpoint);
-            if (!_mappings.ContainsKey(sender))
-            {
-                _logger.Verbose("Deny relay attempt from invalid peer {sender}", sender);
-                return;
-            }
 
-            RelayPair pair = _mappings[sender];
-            pair.LastActive = CurrentTimestamp();
-            IPEndPoint target = pair.Source;
-            if (target.Equals(sender))
+            socket.Lock.WaitOne();
+            try
             {
-                target = pair.Target;
-            }
+                if (socket.Mappings.ContainsKey(sender))
+                {
+                    _logger.Verbose("Deny relay attempt from invalid peer {sender}", sender);
+                    return;
+                }
 
-            if (socket.SendTo(buffer, target) != len)
+                RelayPair pair = socket.Mappings[sender];
+                pair.LastActive = CurrentTimestamp();
+                IPEndPoint target = pair.Source;
+                if (target.Equals(sender))
+                {
+                    target = pair.Target;
+                }
+
+                if (socket.SendTo(buffer, target) != len)
+                {
+                    _logger.Warning("Not all bytes delivered from {sender} to {target}", sender, target);
+                }
+            }
+            finally
             {
-                _logger.Warning("Not all bytes delivered from {sender} to {target}", sender, target);
+                socket.Lock.ReleaseMutex();
             }
         }
-
-        private void AddRelay(IPEndPoint source, IPEndPoint target, int port)
+        private UdpRelaySocket FindPossiblePort(IPEndPoint source, IPEndPoint target)
         {
-            _logger.Information($"Adding peers {source} <-> {target} to port {port} ");
+            int count = _sockets.Count();
+            for (int i = 0; i < count; ++i)
+            {
+                UdpRelaySocket socket = _sockets.ElementAt(_nextSocketIndex);
+                socket.Lock.WaitOne();
+                try
+                {
+                    if (socket.Mappings.ContainsKey(source) || socket.Mappings.ContainsKey(target))
+                    {
+                        continue;
+                    }
+                    else
+                    {
+                        return socket;
+                    }
+                }
+                finally
+                {
+                    socket.Lock.ReleaseMutex();
+                    _nextSocketIndex = (_nextSocketIndex + 1) % count;
+                }
+            }
+            return null;
+        }
+        private int AddRelay(IPEndPoint source, IPEndPoint target, UdpRelaySocket socket)
+        {
+            _logger.Information($"Adding peers {source} <-> {target} to port {socket.Port} ");
 
-            RelayPair pair = new RelayPair {
-                Source = source,
-                Target = target,
-                LastActive = CurrentTimestamp(),
-                Port = port
-            };
+            socket.Lock.WaitOne();
+            try
+            { 
+                RelayPair pair = new RelayPair {
+                    Source = source,
+                    Target = target,
+                    LastActive = CurrentTimestamp()
+                };
 
-            _mappings[source] = pair;
-            _mappings[target] = pair;
-            _relayPairs.AddLast(pair);
+                socket.Mappings[source] = pair;
+                socket.Mappings[target] = pair;
+                socket.Pairs.AddLast(pair);
+
+                return socket.Port;
+            }
+            finally
+            {
+                socket.Lock.ReleaseMutex();
+            }
         }
 
         private long CurrentTimestamp()
         {
             return _stopwatch.ElapsedMilliseconds / 1000;
         }
-
         private void CheckTimeouts(long timestamp)
         {
-            // can be optimized by using a priority queue instead of iterating all
-            var node = _relayPairs.First;
-            while (node != null)
+            foreach (UdpRelaySocket socket in _sockets)
             {
-                var next = node.Next;
-                if (node.Value.LastActive + _peerTimeout < timestamp)
+                CheckTimeouts(timestamp, socket);
+            }
+        }
+        private void CheckTimeouts(long timestamp, UdpRelaySocket socket)
+        {
+            // can be optimized by using a priority queue instead of iterating all
+            socket.Lock.WaitOne();
+            try
+            {
+                var node = socket.Pairs.First;
+                while (node != null)
                 {
-                    _logger.Information("Removing peers {0} <-> {1} from port {2} ",
-                        node.Value.Source,
-                        node.Value.Target,
-                        node.Value.Port
-                    );
-                    _mappings.Remove(node.Value.Source);
-                    _mappings.Remove(node.Value.Target);
-                    _relayPairs.Remove(node);
+                    var next = node.Next;
+                    if (node.Value.LastActive + _peerTimeout < timestamp)
+                    {
+                        _logger.Information("Removing peers {0} <-> {1} from port {2} ",
+                            node.Value.Source,
+                            node.Value.Target,
+                            socket.Port
+                        );
+                        socket.Mappings.Remove(node.Value.Source);
+                        socket.Mappings.Remove(node.Value.Target);
+                        socket.Pairs.Remove(node);
+                    }
+                    node = next;
                 }
-                node = next;
+            }
+            finally
+            {
+                socket.Lock.ReleaseMutex();
             }
         }
     }

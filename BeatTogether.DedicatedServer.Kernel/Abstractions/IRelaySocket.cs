@@ -1,12 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Net;
 
 namespace BeatTogether.DedicatedServer.Kernel.Abstractions
 {
     public interface IRelaySocket
     {
+        public abstract IPEndPoint AddRelayFor(IPEndPoint source, IPEndPoint target);
     }
 }

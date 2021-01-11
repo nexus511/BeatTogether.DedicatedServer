@@ -44,7 +44,6 @@ namespace BeatTogether.DedicatedServer.Kernel.Bootstrap
                 return serviceBus;
             });
 
-            services.AddSingleton<IDedicatedServerPortAllocator, DedicatedServerPortAllocator>();
             services.AddSingleton<IRelayServerFactory, RelayServerFactory>();
             services.AddScoped<IDedicatedServerService, DedicatedServerService>();
             services.AddHostedService<DedicatedServerMessageHandler>();

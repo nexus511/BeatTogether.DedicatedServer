@@ -1,4 +1,5 @@
 ﻿using System.Net;
+using System.Linq;
 using System.Collections.Generic;
 using BeatTogether.DedicatedServer.Kernel.Abstractions;
 using BeatTogether.DedicatedServer.Kernel.Abstractions.Providers;
@@ -9,31 +10,37 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations.Factories
     public class RelayServerFactory : IRelayServerFactory
     {
         private readonly RelayServerConfiguration _configuration;
-        private readonly IDedicatedServerPortAllocator _dedicatedServerPortAllocator;
-        private LinkedList<IRelaySocket> _sockets;
+        private LinkedList<IRelaySocket> _threads = new LinkedList<IRelaySocket>();
+        private int _nextRelayThread = 0;
 
-        public RelayServerFactory(
-            RelayServerConfiguration configuration,
-            IDedicatedServerPortAllocator dedicatedServerPortAllocator)
+        public RelayServerFactory(RelayServerConfiguration configuration)
         {
             _configuration = configuration;
+            IPAddress ipAddress = IPAddress.Parse(configuration.BindAddress);
+            int workers = configuration.WorkersCount;
+            int threads = configuration.ThreadCount;
+
+            for (int i = 0; i < threads; ++i)
+            {
+                _threads.AddLast(new RelaySocket(ipAddress, (i * workers), workers));
+            }
             //_dedicatedServerPortAllocator = dedicatedServerPortAllocator;
         }
 
-        public RelayServer GetRelayServer(IPEndPoint sourceEndPoint, IPEndPoint targetEndPoint)
+        public IPEndPoint GetRelayServer(IPEndPoint sourceEndPoint, IPEndPoint targetEndPoint)
         {
-            /*
-            var port = _dedicatedServerPortAllocator.AcquireRelayServerPort();
-            if (!port.HasValue)
-                return null;
-            return new RelayServer(
-                _dedicatedServerPortAllocator,
-                new IPEndPoint(IPAddress.Any, port.Value),
-                sourceEndPoint,
-                targetEndPoint,
-                _configuration.InactivityTimeout
-            );
-            */
+            int count = _threads.Count;
+            for (int i = 0; i < _threads.Count; ++i)
+            {
+                IPEndPoint endPoint = _threads.ElementAt<IRelaySocket>(i)
+                    .AddRelayFor(sourceEndPoint, targetEndPoint);
+                _nextRelayThread = (_nextRelayThread + 1) % count;
+                if (endPoint != null)
+                {
+                    return endPoint;
+                }
+            }
+            return null;
         }
     }
 }
