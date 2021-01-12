@@ -147,7 +147,7 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
             socket.Lock.WaitOne();
             try
             {
-                if (socket.Mappings.ContainsKey(sender))
+                if (!socket.Mappings.ContainsKey(sender))
                 {
                     _logger.Verbose($"Deny relay attempt from invalid peer {sender}");
                     return;
