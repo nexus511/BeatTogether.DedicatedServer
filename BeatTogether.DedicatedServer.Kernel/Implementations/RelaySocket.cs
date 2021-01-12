@@ -21,19 +21,15 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
         }
         private class UdpRelaySocket : Socket
         {
-            private readonly static ILogger _logger = Log.ForContext<UdpRelaySocket>();
-
             public UdpRelaySocket(IPAddress address, int port)
                 : base(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp)
             {
-                _logger.Verbose($"Open socket on {address}:{port}");
                 this.Bind(new IPEndPoint(address, port));
                 Port = port;
                 Address = address;
             }
             ~UdpRelaySocket()
             {
-                _logger.Verbose($"Closing socket on {Address}:{Port}");
                 this.Close();
             }
 
