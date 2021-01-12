@@ -149,7 +149,8 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
             {
                 if (!socket.Mappings.ContainsKey(sender))
                 {
-                    _logger.Verbose($"Deny relay attempt from invalid peer {sender}");
+                    // TODO: make that info again
+                    _logger.Warning($"Deny relay attempt from invalid peer {sender}");
                     return;
                 }
 
@@ -165,6 +166,10 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
                 if (socket.SendTo(buffer, target) != len)
                 {
                     _logger.Warning($"Not all bytes delivered from {sender} to {target}");
+                }
+                else
+                {
+                    _logger.Verbose($"{sender} -> {target}: {len} bytes");
                 }
             }
             finally
