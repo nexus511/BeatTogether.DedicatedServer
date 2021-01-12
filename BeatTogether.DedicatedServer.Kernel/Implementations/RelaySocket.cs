@@ -22,7 +22,7 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
         private class UdpRelaySocket : Socket
         {
             public UdpRelaySocket(IPAddress address, int port)
-                : base(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp)
+                : base(address.AddressFamily, SocketType.Dgram, ProtocolType.Udp)
             {
                 this.Bind(new IPEndPoint(address, port));
                 Port = port;
@@ -139,10 +139,10 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
         private void RelayFromSocket(UdpRelaySocket socket)
         {
             byte[] buffer = new byte[socket.Available];
-            IPEndPoint sender = new IPEndPoint(IPAddress.Any, 0);
-            EndPoint endpoint = (EndPoint)sender;
 
-            int len = socket.ReceiveFrom(buffer, 0, socket.Available, SocketFlags.None, ref endpoint);
+            EndPoint remote = new IPEndPoint(IPAddress.Any, 0);
+            int len = socket.ReceiveFrom(buffer, ref remote);
+            IPEndPoint sender = (IPEndPoint) remote;
 
             socket.Lock.WaitOne();
             try
