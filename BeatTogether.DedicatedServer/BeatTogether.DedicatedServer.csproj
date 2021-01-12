@@ -32,4 +32,6 @@
     <ProjectReference Include="..\BeatTogether.DedicatedServer.Kernel\BeatTogether.DedicatedServer.Kernel.csproj" />
   </ItemGroup>
 
+  <ProjectExtensions><VisualStudio><UserProperties appsettings_1json__JsonSchema="" /></VisualStudio></ProjectExtensions>
+
 </Project>

@@ -40,21 +40,21 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
         private readonly long _peerTimeout;
 
         private readonly LinkedList<UdpRelaySocket> _sockets = new LinkedList<UdpRelaySocket>();
-        private int _nextSocketIndex = 0;
 
         private readonly Thread _thread;
 
-        private Stopwatch _stopwatch;
+        private readonly Stopwatch _stopwatch = Stopwatch.StartNew();
         
-        private bool _active;
+        private bool _active = true;
 
-        public RelaySocket(IPAddress address, int startPort, int workers)
+        private int _nextSocketIndex = 0;
+
+        public RelaySocket(IPAddress address, int startPort, int workers, int peerTimeout)
         {
             _logger = Log.ForContext<RelaySocket>();
             _address = address;
-            _active = true;
+            _peerTimeout = peerTimeout / 1000;
             _selectTimeout = 1000;
-            _peerTimeout = 60;
             int endPort = startPort + workers - 1;
 
             _thread = new Thread(new ThreadStart(SocketThread));
@@ -112,8 +112,6 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
             _logger.Verbose("Start listening on {_startPort} to {_endPort} " +
                 $" with handler {_thread}"
             );
-
-            _stopwatch = Stopwatch.StartNew();
             long nextTimeoutCheck = CurrentTimestamp() + _peerTimeout;
 
             while (_active)
@@ -221,7 +219,7 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
 
         private long CurrentTimestamp()
         {
-            return _stopwatch.ElapsedMilliseconds / 1000;
+            return (_stopwatch.ElapsedMilliseconds / 1000);
         }
         private void CheckTimeouts(long timestamp)
         {

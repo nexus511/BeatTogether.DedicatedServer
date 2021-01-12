@@ -19,12 +19,13 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations.Factories
             IPAddress ipAddress = IPAddress.Parse(configuration.BindAddress);
             int workers = configuration.WorkersCount;
             int threads = configuration.ThreadCount;
+            int timeout = configuration.InactivityTimeout;
 
             for (int i = 0; i < threads; ++i)
             {
-                _threads.AddLast(new RelaySocket(ipAddress, (i * workers), workers));
+                int startPort = (i * workers);
+                _threads.AddLast(new RelaySocket(ipAddress, startPort, workers, timeout));
             }
-            //_dedicatedServerPortAllocator = dedicatedServerPortAllocator;
         }
 
         public IPEndPoint GetRelayServer(IPEndPoint sourceEndPoint, IPEndPoint targetEndPoint)
