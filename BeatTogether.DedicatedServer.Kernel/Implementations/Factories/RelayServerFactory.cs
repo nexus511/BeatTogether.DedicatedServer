@@ -23,7 +23,7 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations.Factories
 
             for (int i = 0; i < threads; ++i)
             {
-                int startPort = (i * workers);
+                int startPort = configuration.BasePort + (i * workers);
                 _threads.AddLast(new RelaySocket(ipAddress, startPort, workers, timeout));
             }
         }

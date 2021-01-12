@@ -61,7 +61,7 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
             _thread.IsBackground = true;
 
             _logger.Information($"Opening sockets {startPort} to {endPort} " +
-                $" with handler {_thread}"
+                $" with handler {_thread.ManagedThreadId}"
             );
 
             for (int port = startPort; port <= endPort; ++startPort)
@@ -78,15 +78,15 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
                 return true;
             }
 
-            _logger.Information($"Stopping {_thread}");
+            _logger.Information($"Stopping {_thread.ManagedThreadId}");
             _active = false;
             if (_thread.Join(_selectTimeout * 3))
             {
-                _logger.Information($"{_thread} has stopped.");
+                _logger.Information($"{_thread.ManagedThreadId} has stopped.");
                 return true;
             }
 
-            _logger.Error($"Failed to stop {_thread}.");
+            _logger.Error($"Failed to stop {_thread.ManagedThreadId}.");
             return false;
         }
 
@@ -110,7 +110,7 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
         private void SocketThread()
         {
             _logger.Verbose("Start listening on {_startPort} to {_endPort} " +
-                $" with handler {_thread}"
+                $" with handler {_thread.ManagedThreadId}"
             );
             long nextTimeoutCheck = CurrentTimestamp() + _peerTimeout;
 
