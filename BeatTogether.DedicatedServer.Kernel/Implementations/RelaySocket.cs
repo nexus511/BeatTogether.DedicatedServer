@@ -21,7 +21,7 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
         }
         private class UdpRelaySocket : Socket
         {
-            private static ILogger _logger = Log.ForContext<UdpRelaySocket>();
+            private readonly static ILogger _logger = Log.ForContext<UdpRelaySocket>();
 
             public UdpRelaySocket(IPAddress address, int port)
                 : base(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp)
@@ -119,9 +119,7 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
         #region Private Methods
         private void SocketThread()
         {
-            _logger.Verbose("Start listening on {_startPort} to {_endPort} " +
-                $" with handler {_thread.ManagedThreadId}"
-            );
+            _logger.Verbose($"Start socket handler {_thread.ManagedThreadId}");
             long nextTimeoutCheck = CurrentTimestamp() + _peerTimeout;
 
             while (_active)
@@ -155,7 +153,7 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
             {
                 if (socket.Mappings.ContainsKey(sender))
                 {
-                    _logger.Verbose("Deny relay attempt from invalid peer {sender}", sender);
+                    _logger.Verbose($"Deny relay attempt from invalid peer {sender}");
                     return;
                 }
 
@@ -170,7 +168,7 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
 
                 if (socket.SendTo(buffer, target) != len)
                 {
-                    _logger.Warning("Not all bytes delivered from {sender} to {target}", sender, target);
+                    _logger.Warning($"Not all bytes delivered from {sender} to {target}");
                 }
             }
             finally
@@ -206,7 +204,7 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
         }
         private int AddRelay(IPEndPoint source, IPEndPoint target, UdpRelaySocket socket)
         {
-            _logger.Information($"Adding peers {source} <-> {target} to port {socket.Port} ");
+            _logger.Information($"Adding peers {source} <-> {target} to port {socket.Port}");
 
             socket.Lock.WaitOne();
             try
