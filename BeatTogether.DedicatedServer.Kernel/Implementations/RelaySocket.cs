@@ -21,14 +21,24 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
         }
         private class UdpRelaySocket : Socket
         {
+            private static ILogger _logger = Log.ForContext<UdpRelaySocket>();
+
             public UdpRelaySocket(IPAddress address, int port)
                 : base(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp)
             {
+                _logger.Verbose($"open socket on {address}:{port}");
                 this.Bind(new IPEndPoint(address, port));
                 Port = port;
+                Address = address;
+            }
+            ~UdpRelaySocket()
+            {
+                _logger.Verbose($"closing socket on {Address}:{Port}");
+                this.Close();
             }
 
             public int Port { get; set; }
+            public IPAddress Address { get; set; }
             public Dictionary<IPEndPoint, RelayPair> Mappings { get; } = new Dictionary<IPEndPoint, RelayPair>();
             public Mutex Lock { get; } = new Mutex();
             public HashSet<IPEndPoint> TimeoutSet = new HashSet<IPEndPoint>();
