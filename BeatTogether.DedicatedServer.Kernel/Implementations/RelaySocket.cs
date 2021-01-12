@@ -26,14 +26,14 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
             public UdpRelaySocket(IPAddress address, int port)
                 : base(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp)
             {
-                _logger.Verbose($"open socket on {address}:{port}");
+                _logger.Verbose($"Open socket on {address}:{port}");
                 this.Bind(new IPEndPoint(address, port));
                 Port = port;
                 Address = address;
             }
             ~UdpRelaySocket()
             {
-                _logger.Verbose($"closing socket on {Address}:{Port}");
+                _logger.Verbose($"Closing socket on {Address}:{Port}");
                 this.Close();
             }
 
@@ -74,7 +74,7 @@ namespace BeatTogether.DedicatedServer.Kernel.Implementations
                 $" with handler {_thread.ManagedThreadId}"
             );
 
-            for (int port = startPort; port <= endPort; ++startPort)
+            for (int port = startPort; port <= endPort; ++port)
             {
                 _sockets.AddLast(new UdpRelaySocket(address, port));
             }
